@@ -3,11 +3,15 @@ pragma solidity 0.8.20;
 
 import { ERC721 } from "@solady/tokens/ERC721.sol";
 import { IERC20 } from "@openzeppelin/interfaces/IERC20.sol";
+import { ClonesWithImmutableArgs } from "clones-with-immutable-args/src/ClonesWithImmutableArgs.sol";
+import { Clone } from "clones-with-immutable-args/src/Clone.sol";
 
-// can deploy on OP?
+// can deploy on OP? and mainnet eth
 
 // bunnies with rabies array storage, load to memory, operate on it, store again
 
+// There are no bugs in the Rabbits token contract.
+// It's there for reference but skip ahead to other contracts to manage your time.
 contract Rabbits is ERC721 {
     /* --------------------------------- Storage -------------------------------- */
 
@@ -63,17 +67,23 @@ contract Rabbits is ERC721 {
     }
 }
 
+/// @notice Uses clones-with-immutable-args to avoid cost of storage reads.
+///         See https://github.com/wighawag/clones-with-immutable-args
 contract ResearchLab is Clone {
     function commitReseachResources() public { }
 
     function revealResearchResult() public { }
 
-    function trulyRandomExternalCall(uint256 id) internal { 
-        delegatecall
+    function trulyRandomExternalCall(uint256 id) internal {
+        // Update state at the same time
+        //
+        // delegatecall
     }
 }
 
 contract RabidRabbits {
+    using ClonesWithImmutableArgs for address;
+
     /* ---------------------------------- Types --------------------------------- */
 
     enum Rabies {
@@ -94,10 +104,12 @@ contract RabidRabbits {
 
     uint256 public constant ADOPTION_PRICE = 10 ether;
     uint256 public constant DR_FEES = 0.5 ether;
-    uint256 public constant SECONDS_IN_DAY = 86_400; 
+    uint256 public constant SECONDS_IN_DAY = 86_400;
 
     IERC20 immutable lidoToken;
-    bytes immutable cloneArgs;
+    ResearchLab immutable researchLabImpl;
+
+    address immutable cloneArgsTarget;
 
     /* --------------------------------- Storage -------------------------------- */
 
@@ -106,12 +118,15 @@ contract RabidRabbits {
 
     /* ------------------------------- Constructor ------------------------------ */
 
-    constructor(IERC20 _lidoToken, bytes _cloneArgs) {
+    constructor(IERC20 _lidoToken, address _cloneArgsTarget) {
+        // Deploy contracts.
         rabbitToken = new Rabbits();
+        researchLabImpl = new ResearchLab();
 
-        lidoToken = IERC20(_lidoToken); // save gas by not casting 2x
-        // write it twice and ask about it
-        cloneArgs = _cloneArgs;
+        // Set contract state.
+        lidoToken = IERC20(_lidoToken); // Q about save gas by not casting 2x
+
+        cloneArgsTarget = _cloneArgsTarget;
     }
 
     /* ------------------------ Public State Transitions ------------------------ */
@@ -133,8 +148,19 @@ contract RabidRabbits {
         abi.encodePacked(arg);
 
         // clone multiple
+        for (uint256 i = 0; i < 10; i++) {
+            ResearchLab researchLab = ResearchLab(address(researchLabImpl).clone(cloneArgs));
+            researchLab.commitReseachResources();
+            researchLab.revealResearchResult();
+        }
         // commit resources
         // reveal result
+    }
+
+    function burry(uint256 idx) public {
+        // burn token
+        // transfer ownership to address(0)
+        // array mismanagement
     }
 
     // terminal state when burned by non deployer

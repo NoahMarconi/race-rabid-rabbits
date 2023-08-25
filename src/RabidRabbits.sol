@@ -2,6 +2,7 @@
 pragma solidity 0.8.20;
 
 import { ERC721 } from "@solady/tokens/ERC721.sol";
+import { IERC20 } from "@openzeppelin/interfaces/IERC20.sol";
 
 // can deploy on OP?
 
@@ -62,6 +63,16 @@ contract Rabbits is ERC721 {
     }
 }
 
+contract ResearchLab is Clone {
+    function commitReseachResources() public { }
+
+    function revealResearchResult() public { }
+
+    function trulyRandomExternalCall(uint256 id) internal { 
+        delegatecall
+    }
+}
+
 contract RabidRabbits {
     /* ---------------------------------- Types --------------------------------- */
 
@@ -76,17 +87,54 @@ contract RabidRabbits {
         uint256 id;
         Rabies rabies;
         address owner;
+        uint256 lastCheckUp;
     }
+
+    /* -------------------------- Immutable / Constant -------------------------- */
+
+    uint256 public constant ADOPTION_PRICE = 10 ether;
+    uint256 public constant DR_FEES = 0.5 ether;
+    uint256 public constant SECONDS_IN_DAY = 86_400; 
+
+    IERC20 immutable lidoToken;
+    bytes immutable cloneArgs;
 
     /* --------------------------------- Storage -------------------------------- */
 
     Bunny[] public bunnies;
-    Rabbits rabbitToken;
+    Rabbits public rabbitToken;
 
     /* ------------------------------- Constructor ------------------------------ */
 
-    constructor() {
+    constructor(IERC20 _lidoToken, bytes _cloneArgs) {
         rabbitToken = new Rabbits();
+
+        lidoToken = IERC20(_lidoToken); // save gas by not casting 2x
+        // write it twice and ask about it
+        cloneArgs = _cloneArgs;
+    }
+
+    /* ------------------------ Public State Transitions ------------------------ */
+
+    function adopt() public {
+        lidoToken.transferFrom(msg.sender, address(this), ADOPTION_PRICE);
+        rabbitToken.mint(msg.sender, bunnies.length);
+        bunnies.push(Bunny(bunnies.length, Rabies.None, msg.sender, block.timestamp));
+    }
+
+    function checkUp(uint256 idx) public {
+        // when missed checkup you definitely have rabies
+        // when checkup on time, odds of getting rabies are 1/10000
+    }
+
+    function miracleCure(uint256 start, uint256 end) public { }
+
+    function researchAndDevelopment() public {
+        abi.encodePacked(arg);
+
+        // clone multiple
+        // commit resources
+        // reveal result
     }
 
     // terminal state when burned by non deployer

@@ -2,4 +2,4 @@
 forge-std/=lib/forge-std/src/
 @solady/=lib/solady/src/
 @openzeppelin=lib/openzeppelin-contracts/contracts/
-clones-with-immutable-args=lib/clones-with-immutable-args/
+clones-with-immutable-args=lib/clones-with-immutable-args/src

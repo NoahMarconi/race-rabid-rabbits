@@ -3,15 +3,13 @@ pragma solidity 0.8.20;
 
 import { ERC721 } from "@solady/tokens/ERC721.sol";
 import { IERC20 } from "@openzeppelin/interfaces/IERC20.sol";
-import { ClonesWithImmutableArgs } from "clones-with-immutable-args/src/ClonesWithImmutableArgs.sol";
-import { Clone } from "clones-with-immutable-args/src/Clone.sol";
-
-// can deploy on OP? and mainnet eth
+import { ClonesWithImmutableArgs } from "clones-with-immutable-args/ClonesWithImmutableArgs.sol";
+import { Clone } from "clones-with-immutable-args/Clone.sol";
 
 // bunnies with rabies array storage, load to memory, operate on it, store again
 
-// There are no bugs in the Rabbits token contract.
-// It's there for reference but skip ahead to other contracts to manage your time.
+/// @notice For the purpose of RACE-21 there are no bugs in the `Rabbits` token contract.
+///         If anything exists it's due to intergrating with the token contract, not the token contract itself.
 contract Rabbits is ERC721 {
     /* --------------------------------- Storage -------------------------------- */
 
@@ -55,34 +53,120 @@ contract Rabbits is ERC721 {
 
     /// @dev Returns the Uniform Resource Identifier (URI) for token `id`.
     function tokenURI(uint256) public pure override returns (string memory) {
-        return "{ fancyJson: true }";
+        return "{ fancyJson: true }"; // not relevant for RACE-21
     }
 
     function mint(address to, uint256 tokenId) public onlyDeployer {
         _mint(to, tokenId);
     }
 
-    function burn(uint256 tokenId) public {
+    function sudoBurn(uint256 tokenId) public onlyDeployer {
         _burn(tokenId);
+    }
+
+    function burn(uint256 tokenId) public {
+        _burn(msg.sender, tokenId);
+    }
+}
+
+interface SharedTypes {
+    /* ---------------------------------- Types --------------------------------- */
+
+    enum CommitReveal {
+        None,
+        Commit,
+        Reveal
+    }
+
+    struct Research {
+        CommitReveal commitReveal;
+        bool successfulFinding;
+    }
+
+    struct Entropy {
+        bytes32 entropy;
+        uint256 timestamp;
+        bytes32 previousEntropy;
+        bool previousResult;
     }
 }
 
 /// @notice Uses clones-with-immutable-args to avoid cost of storage reads.
 ///         See https://github.com/wighawag/clones-with-immutable-args
 contract ResearchLab is Clone {
-    function commitReseachResources() public { }
+    /* --------------------------------- Storage -------------------------------- */
 
-    function revealResearchResult() public { }
+    SharedTypes.Research[] public researchEndeavors;
+    SharedTypes.Entropy public entropy;
 
-    function trulyRandomExternalCall(uint256 id) internal {
+    /* --------------------------------- Getters -------------------------------- */
+
+    function getRandomOracle() public pure returns (address) {
+        return _getArgAddress(0);
+    }
+
+    function getEndeavor(uint256 idx) public view returns (SharedTypes.Research memory) {
+        return researchEndeavors[idx];
+    }
+
+    /* ------------------------ State Transition Function ----------------------- */
+
+    function commitReseachResources() public {
+        researchEndeavors.push(SharedTypes.Research(SharedTypes.CommitReveal.Commit, false));
+    }
+
+    function revealResearchResult(uint256 idx) public {
+        SharedTypes.Research storage endeavor = researchEndeavors[idx];
+        trulyRandomExternalCall(endeavor);
+    }
+
+    function trulyRandomExternalCall(SharedTypes.Research memory endeavor) internal {
         // Update state at the same time
-        //
-        // delegatecall
+        bytes memory payload = abi.encodeWithSelector(TrulyRandomOracleMock.revealResearchResult.selector, endeavor);
+
+        // Use TrulyRandomOracleMock to update state
+        getRandomOracle().delegatecall(payload);
+    }
+}
+
+contract TrulyRandomOracleMock {
+    /* --------------------------------- Storage -------------------------------- */
+
+    SharedTypes.Research[] internal researchEndeavors;
+    SharedTypes.Entropy public entropy;
+
+    /* ------------------------ State Transition Function ----------------------- */
+
+    // For the purpose of RACE-21 assume the random oracle obtains a seed from a truly random source.
+    function revealResearchResult(SharedTypes.Research memory endeavor) public {
+        // This line is a mock, assume it was actually random from external source.
+        bytes32 mockRandomSeed = keccak256(abi.encode(entropy, endeavor, block.timestamp));
+
+        // Calculate new entropy.
+        SharedTypes.Entropy memory newEntropy = entropy;
+        calculateResult(newEntropy, mockRandomSeed);
+
+        // Update state.
+        entropy = newEntropy;
+    }
+
+    /* --------------------------------- Helpers -------------------------------- */
+
+    function calculateResult(SharedTypes.Entropy memory newEntropy, bytes32 mockRandomSeed) internal view {
+        newEntropy.entropy = mockRandomSeed;
+        newEntropy.timestamp = block.timestamp;
+        newEntropy.previousEntropy = entropy.entropy;
+        // 1 in 10_000 chance but disallow 2 in a row
+        newEntropy.previousResult = uint256(mockRandomSeed) % 10_000 == 0 && !entropy.previousResult;
     }
 }
 
 contract RabidRabbits {
     using ClonesWithImmutableArgs for address;
+
+    /* --------------------------------- Errors --------------------------------- */
+
+    error NotDead();
 
     /* ---------------------------------- Types --------------------------------- */
 
@@ -97,19 +181,18 @@ contract RabidRabbits {
         uint256 id;
         Rabies rabies;
         address owner;
-        uint256 lastCheckUp;
+        uint256 birthed;
+        ResearchLab[] researchLabs;
     }
 
     /* -------------------------- Immutable / Constant -------------------------- */
 
     uint256 public constant ADOPTION_PRICE = 10 ether;
     uint256 public constant DR_FEES = 0.5 ether;
-    uint256 public constant SECONDS_IN_DAY = 86_400;
 
-    IERC20 immutable lidoToken;
-    ResearchLab immutable researchLabImpl;
-
-    address immutable cloneArgsTarget;
+    IERC20 public immutable lidoToken;
+    ResearchLab public immutable researchLabImpl;
+    address public immutable cloneArgsTarget;
 
     /* --------------------------------- Storage -------------------------------- */
 
@@ -129,39 +212,56 @@ contract RabidRabbits {
         cloneArgsTarget = _cloneArgsTarget;
     }
 
+    /* --------------------------------- Getters -------------------------------- */
+
+    function labsOf(uint256 bunnyIdx, uint256 labIdx) public view returns (ResearchLab) {
+        return bunnies[bunnyIdx].researchLabs[labIdx];
+    }
+
     /* ------------------------ Public State Transitions ------------------------ */
 
     function adopt() public {
         lidoToken.transferFrom(msg.sender, address(this), ADOPTION_PRICE);
         rabbitToken.mint(msg.sender, bunnies.length);
-        bunnies.push(Bunny(bunnies.length, Rabies.None, msg.sender, block.timestamp));
+
+        // 1 in 1000 chance of having a rabbit with rabies.
+        uint256 randomSeed = uint256(blockhash(block.number));
+        Rabies rabies = randomSeed % uint32(1000) == 0 ? Rabies.Symtomatic : Rabies.None;
+        bunnies.push(Bunny(bunnies.length, rabies, msg.sender, block.timestamp, new ResearchLab[](0)));
     }
 
-    function checkUp(uint256 idx) public {
-        // when missed checkup you definitely have rabies
-        // when checkup on time, odds of getting rabies are 1/10000
+    function miracleCure(uint256 start, uint256 end) public {
+        // Once a cure is found we can cure symptomatic rabbits.
+        // "left as exercise for the reader"
     }
 
-    function miracleCure(uint256 start, uint256 end) public { }
+    function researchAndDevelopment(uint256 idx) public {
+        bytes memory cloneArgs = abi.encodePacked(cloneArgsTarget);
 
-    function researchAndDevelopment() public {
-        abi.encodePacked(arg);
-
-        // clone multiple
+        ResearchLab researchLab = ResearchLab(address(researchLabImpl).clone(cloneArgs));
+        // init multiple
         for (uint256 i = 0; i < 10; i++) {
-            ResearchLab researchLab = ResearchLab(address(researchLabImpl).clone(cloneArgs));
             researchLab.commitReseachResources();
-            researchLab.revealResearchResult();
+            researchLab.revealResearchResult(i);
         }
-        // commit resources
-        // reveal result
+
+        // Credit where credit is due.
+        bunnies[idx].researchLabs.push(researchLab);
     }
 
+    /// @notice if a rabbit has rabies and is not cured, it will die (╥﹏╥)
     function burry(uint256 idx) public {
-        // burn token
-        // transfer ownership to address(0)
-        // array mismanagement
-    }
+        Bunny[] memory localBunnies = bunnies;
 
-    // terminal state when burned by non deployer
+        if (localBunnies[idx].rabies != Rabies.Symtomatic && (block.timestamp < 7 days + localBunnies[idx].birthed)) {
+            revert NotDead();
+        }
+
+        // Efficiently delete from array.
+        bunnies[idx] = bunnies[localBunnies.length - 1];
+        delete bunnies[localBunnies.length - 1];
+
+        // Tidy up and burn token.
+        rabbitToken.sudoBurn(idx);
+    }
 }

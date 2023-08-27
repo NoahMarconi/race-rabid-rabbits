@@ -6,8 +6,6 @@ import { IERC20 } from "@openzeppelin/interfaces/IERC20.sol";
 import { ClonesWithImmutableArgs } from "clones-with-immutable-args/ClonesWithImmutableArgs.sol";
 import { Clone } from "clones-with-immutable-args/Clone.sol";
 
-// bunnies with rabies array storage, load to memory, operate on it, store again
-
 /// @notice For the purpose of RACE-21 there are no bugs in the `Rabbits` token contract.
 ///         If anything exists it's due to intergrating with the token contract, not the token contract itself.
 contract Rabbits is ERC721 {
@@ -101,6 +99,7 @@ contract ResearchLab is Clone {
 
     /* --------------------------------- Getters -------------------------------- */
 
+    /// @notice For clones-with-immutable-args custom getters are needed.
     function getRandomOracle() public pure returns (address) {
         return _getArgAddress(0);
     }
@@ -122,7 +121,7 @@ contract ResearchLab is Clone {
 
     function trulyRandomExternalCall(SharedTypes.Research memory endeavor) internal {
         // Update state at the same time
-        bytes memory payload = abi.encodeWithSelector(TrulyRandomOracleMock.revealResearchResult.selector, endeavor);
+        bytes memory payload = abi.encodeWithSelector(TrulyRandomOracleMock.oracleResult.selector, endeavor);
 
         // Use TrulyRandomOracleMock to update state
         getRandomOracle().delegatecall(payload);
@@ -138,7 +137,7 @@ contract TrulyRandomOracleMock {
     /* ------------------------ State Transition Function ----------------------- */
 
     // For the purpose of RACE-21 assume the random oracle obtains a seed from a truly random source.
-    function revealResearchResult(SharedTypes.Research memory endeavor) public {
+    function oracleResult(SharedTypes.Research memory endeavor) public {
         // This line is a mock, assume it was actually random from external source.
         bytes32 mockRandomSeed = keccak256(abi.encode(entropy, endeavor, block.timestamp));
 
@@ -146,8 +145,12 @@ contract TrulyRandomOracleMock {
         SharedTypes.Entropy memory newEntropy = entropy;
         calculateResult(newEntropy, mockRandomSeed);
 
-        // Update state.
+        // Update entropy state.
         entropy = newEntropy;
+
+        // Update endeavor state.
+        endeavor.commitReveal = SharedTypes.CommitReveal.Reveal;
+        endeavor.successfulFinding = newEntropy.previousResult;
     }
 
     /* --------------------------------- Helpers -------------------------------- */
@@ -207,7 +210,7 @@ contract RabidRabbits {
         researchLabImpl = new ResearchLab();
 
         // Set contract state.
-        lidoToken = IERC20(_lidoToken); // Q about save gas by not casting 2x
+        lidoToken = IERC20(_lidoToken);
 
         cloneArgsTarget = _cloneArgsTarget;
     }
@@ -236,12 +239,14 @@ contract RabidRabbits {
     }
 
     function researchAndDevelopment(uint256 idx) public {
+        // Clone ResearchLab.
         bytes memory cloneArgs = abi.encodePacked(cloneArgsTarget);
-
         ResearchLab researchLab = ResearchLab(address(researchLabImpl).clone(cloneArgs));
-        // init multiple
+
+        // init multiple research initiatives.
         for (uint256 i = 0; i < 10; i++) {
             researchLab.commitReseachResources();
+            // This is a RACE, no time for actual commit/reveal.
             researchLab.revealResearchResult(i);
         }
 

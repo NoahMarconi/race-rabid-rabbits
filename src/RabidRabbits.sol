@@ -7,7 +7,7 @@ import { ClonesWithImmutableArgs } from "clones-with-immutable-args/ClonesWithIm
 import { Clone } from "clones-with-immutable-args/Clone.sol";
 
 /// @notice For the purpose of RACE-21 there are no bugs in the `Rabbits` token contract.
-///         If anything exists it's due to intergrating with the token contract, not the token contract itself.
+///         If anything exists it's due to integrating with the token contract, not the token contract itself.
 contract Rabbits is ERC721 {
     /* --------------------------------- Storage -------------------------------- */
 

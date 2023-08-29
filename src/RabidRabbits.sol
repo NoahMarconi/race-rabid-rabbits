@@ -175,7 +175,7 @@ contract RabidRabbits {
 
     enum Rabies {
         None,
-        Symtomatic,
+        Symptomatic,
         Ded,
         Cured
     }
@@ -204,6 +204,8 @@ contract RabidRabbits {
 
     /* ------------------------------- Constructor ------------------------------ */
 
+    // For the purpose of RACE-21 we are passing in the Lido token from mainnet
+    // https://etherscan.io/token/0x5a98fcbea516cf06857215779fd812ca3bef1b32#code
     constructor(IERC20 _lidoToken, address _cloneArgsTarget) {
         // Deploy contracts.
         rabbitToken = new Rabbits();
@@ -229,7 +231,7 @@ contract RabidRabbits {
 
         // 1 in 1000 chance of having a rabbit with rabies.
         uint256 randomSeed = uint256(blockhash(block.number));
-        Rabies rabies = randomSeed % uint32(1000) == 0 ? Rabies.Symtomatic : Rabies.None;
+        Rabies rabies = randomSeed % uint32(1000) == 0 ? Rabies.Symptomatic : Rabies.None;
         bunnies.push(Bunny(bunnies.length, rabies, msg.sender, block.timestamp, new ResearchLab[](0)));
     }
 
@@ -258,13 +260,13 @@ contract RabidRabbits {
     function burry(uint256 idx) public {
         Bunny[] memory localBunnies = bunnies;
 
-        if (localBunnies[idx].rabies != Rabies.Symtomatic && (block.timestamp < 7 days + localBunnies[idx].birthed)) {
+        if (localBunnies[idx].rabies != Rabies.Symptomatic && (block.timestamp < 7 days + localBunnies[idx].birthed)) {
             revert NotDead();
         }
 
         // Efficiently delete from array.
         bunnies[idx] = bunnies[localBunnies.length - 1];
-        delete bunnies[localBunnies.length - 1];
+        bunnies.pop();
 
         // Tidy up and burn token.
         rabbitToken.sudoBurn(idx);
